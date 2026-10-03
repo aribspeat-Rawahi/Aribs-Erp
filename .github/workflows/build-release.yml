@@ -1,16 +1,18 @@
 # Builds the Windows installer and the signed Android APK.
 #
-# Two ways to run it:
+# Ways to run it:
 #
-# 1) RELEASE (production): push a tag like v1.1.0
+# 1) RELEASE (production): Actions -> "Build apps" -> Run workflow ->
+#    mode = release   (or push a tag like v1.1.0)
+#      -> the version comes from desktop/package.json (tag v<version>)
 #      -> apps open https://erp.aribs.net
 #      -> both files are published to one GitHub Release; the apps'
 #         built-in updaters pick it up automatically.
 #
-# 2) TEST BUILD (staging): Actions tab -> "Build apps" -> "Run workflow"
+# 2) TEST BUILD (staging): Run workflow with mode = test (default)
 #      -> apps open the URL you enter (default: the staging site)
-#      -> nothing is published; download the files from the run's
-#         "Artifacts" section.
+#      -> files go to the "staging-test" PRE-release (ignored by the
+#         apps' updaters) and to the run's Artifacts.
 #
 # Only needed when the APP itself changes (icon, version, native plugins).
 # Normal ERP updates reach the apps through the website - no build needed.
@@ -27,8 +29,13 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'test = staging test build, release = real production release'
+        type: choice
+        options: [test, release]
+        default: test
       server_url:
-        description: 'ERP address the test apps should open'
+        description: 'ERP address for TEST builds (ignored for release)'
         required: true
         default: 'https://staging-erp.aribs.net'
 
@@ -36,8 +43,8 @@ permissions:
   contents: write
 
 env:
-  IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
-  ERP_SERVER_URL: ${{ startsWith(github.ref, 'refs/tags/v') && 'https://erp.aribs.net' || inputs.server_url }}
+  IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.mode == 'release' }}
+  ERP_SERVER_URL: ${{ (startsWith(github.ref, 'refs/tags/v') || inputs.mode == 'release') && 'https://erp.aribs.net' || inputs.server_url }}
 
 jobs:
   windows-app:
@@ -48,6 +55,12 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+
+      - name: Releases only from main
+        if: env.IS_RELEASE == 'true' && github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "::error::Release builds must be started from the main branch."
+          exit 1
 
       - uses: actions/setup-node@v4
         with:
@@ -143,10 +156,15 @@ jobs:
         if: always()
         run: rm -f mobile/keystore/release.keystore
 
+      - name: Read app version
+        id: ver
+        run: echo "version=$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
+
       - name: Publish APK to the GitHub Release
         if: env.IS_RELEASE == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.ver.outputs.version }}
           files: ARIBS-ERP.apk
 
       - name: Upload test APK
@@ -162,7 +180,7 @@ jobs:
   # phones). Pre-releases are ignored by both apps' update checkers, so
   # normal users never see these builds.
   publish-test-build:
-    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') && inputs.mode != 'release' }}
     needs: [windows-app, android-app]
     runs-on: ubuntu-latest
     steps:

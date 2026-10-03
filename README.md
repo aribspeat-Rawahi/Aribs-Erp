@@ -22,19 +22,19 @@ plugins (PDF viewer, share), or the server address.
 
 1. Bump `version` in `desktop/package.json`
 2. Bump `versionCode` (+1) and `versionName` in `mobile/android/app/build.gradle`
-3. Commit, then tag and push:
-   ```bash
-   git tag v1.1.1
-   git push && git push --tags
-   ```
-GitHub Actions builds both apps and publishes them on one GitHub Release.
+3. Commit and push to `main`
+4. GitHub → **Actions → Build apps → Run workflow** → mode **release**
+   (pushing a tag like `v1.1.1` also works)
+
+GitHub Actions builds both apps and publishes them on one GitHub Release
+tagged `v<version>`.
 The installed apps detect it and offer the update.
 
 ## Test build (staging)
 
-GitHub → **Actions → Build apps → Run workflow** (server URL defaults to
-the staging site). Download the APK / installer from the run's
-**Artifacts**. Nothing is published, so normal users are not affected.
+GitHub → **Actions → Build apps → Run workflow** → mode **test** (server URL
+defaults to the staging site). Download links appear on the
+**staging-test** pre-release, which the apps' updaters ignore.
 
 ## Android signing
 
