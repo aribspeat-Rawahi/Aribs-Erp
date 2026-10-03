@@ -69,23 +69,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Remove an incomplete release of this version (release only)
+      # electron-builder races when no release exists yet and can create
+      # several drafts for one version. So we clean up any leftovers from
+      # an earlier failed run and create exactly ONE draft up front; the
+      # installer and the APK are then both uploaded into that draft.
+      - name: Prepare a single draft release (release only)
         if: env.IS_RELEASE == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
           TAG="v$VERSION"
-          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            ASSETS=$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | join(" ")')
-            DRAFT=$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')
+          REPO="$GITHUB_REPOSITORY"
+          gh api "repos/$REPO/releases?per_page=100" \
+            --jq ".[] | select(.tag_name==\"$TAG\") | [.id, .draft, ([.assets[].name] | join(\",\"))] | @tsv" > existing.tsv
+          while IFS=$'\t' read -r ID DRAFT ASSETS; do
+            [ -z "$ID" ] && continue
             if [ "$DRAFT" = "false" ] && echo "$ASSETS" | grep -q '\.exe' && echo "$ASSETS" | grep -q '\.apk'; then
               echo "::error::Release $TAG is already complete. Bump the version (desktop/package.json + mobile build.gradle) for a new release."
               exit 1
             fi
-            echo "Deleting incomplete release $TAG (assets: $ASSETS)"
-            gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY"
-          fi
+            echo "Deleting leftover release $ID ($TAG, draft=$DRAFT, assets: $ASSETS)"
+            gh api -X DELETE "repos/$REPO/releases/$ID"
+          done < existing.tsv
+          rm -f existing.tsv
+          gh api -X DELETE "repos/$REPO/git/refs/tags/$TAG" >/dev/null 2>&1 || true
+          gh release create "$TAG" --draft --target "$GITHUB_SHA" -R "$REPO" \
+            --title "ARIBS ERP $TAG" \
+            --notes "Windows installer and Android APK. Both apps open https://erp.aribs.net and update themselves."
+          echo "Created draft release $TAG"
 
       - name: Point the app at the ERP site
         run: |
