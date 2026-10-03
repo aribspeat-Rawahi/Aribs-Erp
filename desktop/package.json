@@ -1,0 +1,53 @@
+{
+  "name": "aribs-erp-desktop",
+  "version": "1.1.0",
+  "description": "ARIBS ERP - Windows desktop app. Loads the live ERP website (live URL mode), so every server update appears here immediately without reinstalling.",
+  "main": "electron/main.js",
+  "author": "ARIBS",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --publish=never",
+    "release:win": "electron-builder --win --publish=always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^44.5.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "net.aribs.erp.desktop",
+    "productName": "ARIBS ERP",
+    "files": [
+      "electron/**/*",
+      "build-resources/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build-resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "aribspeat-Rawahi",
+        "repo": "Aribs-Erp",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "erpServerUrl": "https://erp.aribs.net"
+}

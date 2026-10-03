@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+  <title>ARIBS ERP - Offline</title>
+  <style>
+    body { margin: 0; height: 100vh; display: flex; align-items: center; justify-content: center;
+           font-family: "Segoe UI", system-ui, sans-serif; background: #f4f9ec; color: #1f2a17; }
+    .card { width: 360px; padding: 32px 28px; background: #fff; border-radius: 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,.08); text-align: center; }
+    .dot { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #7cb342; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { font-size: 14px; line-height: 1.5; color: #4b5a40; margin: 0 0 20px; }
+    button { width: 100%; padding: 11px; border: 0; border-radius: 10px; background: #558b2f; color: #fff;
+             font-size: 15px; font-weight: 600; cursor: pointer; }
+    button:hover { background: #33691e; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="dot"></div>
+    <h1>Can't reach ARIBS ERP</h1>
+    <p>Check your internet connection, then try again.</p>
+    <button id="retry">Try again</button>
+  </div>
+  <script>
+    document.getElementById('retry').addEventListener('click', function () {
+      var target = new URLSearchParams(location.search).get('target') || '';
+      // Only ever go back to an https address (the ERP site).
+      if (/^https:\/\//i.test(target)) location.href = target;
+    });
+  </script>
+</body>
+</html>

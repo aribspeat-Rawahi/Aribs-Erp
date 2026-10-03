@@ -1,0 +1,158 @@
+# Builds the Windows installer and the signed Android APK.
+#
+# Two ways to run it:
+#
+# 1) RELEASE (production): push a tag like v1.1.0
+#      -> apps open https://erp.aribs.net
+#      -> both files are published to one GitHub Release; the apps'
+#         built-in updaters pick it up automatically.
+#
+# 2) TEST BUILD (staging): Actions tab -> "Build apps" -> "Run workflow"
+#      -> apps open the URL you enter (default: the staging site)
+#      -> nothing is published; download the files from the run's
+#         "Artifacts" section.
+#
+# Only needed when the APP itself changes (icon, version, native plugins).
+# Normal ERP updates reach the apps through the website - no build needed.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+#   ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+# Secret VALUES are never printed by this workflow.
+name: Build apps
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: 'ERP address the test apps should open'
+        required: true
+        default: 'https://staging-erp.aribs.net'
+
+permissions:
+  contents: write
+
+env:
+  IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+  ERP_SERVER_URL: ${{ startsWith(github.ref, 'refs/tags/v') && 'https://erp.aribs.net' || inputs.server_url }}
+
+jobs:
+  windows-app:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Point the app at the ERP site
+        run: |
+          npm pkg set erpServerUrl="$ERP_SERVER_URL"
+          echo "Desktop app will open: $ERP_SERVER_URL"
+
+      - name: Build and publish installer (release)
+        if: env.IS_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release:win
+
+      - name: Build installer (test build, not published)
+        if: env.IS_RELEASE != 'true'
+        run: npm run dist:win
+
+      - name: Upload test installer
+        if: env.IS_RELEASE != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-test
+          path: desktop/release/*.exe
+          retention-days: 14
+
+  android-app:
+    runs-on: ubuntu-latest
+    # Runs after Windows so the GitHub Release already exists and the APK
+    # is added to that SAME release (no duplicate/draft releases).
+    needs: windows-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Check signing secrets are configured (values not shown)
+        env:
+          B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEYPASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -z "$B64" ] && missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -z "$PASS" ] && missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -z "$ALIAS" ] && missing="$missing ANDROID_KEY_ALIAS"
+          [ -z "$KEYPASS" ] && missing="$missing ANDROID_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            exit 1
+          fi
+          echo "All 4 signing secrets are set."
+
+      - name: Install web dependencies and sync Capacitor
+        working-directory: mobile
+        run: |
+          npm ci
+          npx cap sync android
+          echo "Android app will open: $ERP_SERVER_URL"
+
+      - name: Decode signing keystore
+        working-directory: mobile
+        run: |
+          mkdir -p keystore
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > keystore/release.keystore
+
+      - name: Build signed release APK
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/mobile/keystore/release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/ARIBS-ERP.apk"
+
+      - name: Remove keystore from the runner
+        if: always()
+        run: rm -f mobile/keystore/release.keystore
+
+      - name: Publish APK to the GitHub Release
+        if: env.IS_RELEASE == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ARIBS-ERP.apk
+
+      - name: Upload test APK
+        if: env.IS_RELEASE != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-test
+          path: ARIBS-ERP.apk
+          retention-days: 14

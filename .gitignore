@@ -1,0 +1,24 @@
+# Dependencies / build output
+node_modules/
+desktop/release/
+dist-electron/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/.gradle/
+mobile/android/local.properties
+
+# Signing keys and secrets - NEVER commit (they live only in GitHub
+# repository secrets and in your own safe backup).
+*.keystore
+*.jks
+*.keystore.b64
+*-b64.txt
+CREDENTIALS*.txt
+keystore/
+.env
+.env.*
+
+# OS / editor / logs
+.DS_Store
+Thumbs.db
+*.log
