@@ -156,3 +156,43 @@ jobs:
           name: android-apk-test
           path: ARIBS-ERP.apk
           retention-days: 14
+
+  # Test builds only: put both files on a "Staging test build" PRE-release
+  # so they can be downloaded with a plain link (no GitHub login, works on
+  # phones). Pre-releases are ignored by both apps' update checkers, so
+  # normal users never see these builds.
+  publish-test-build:
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+    needs: [windows-app, android-app]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Give files stable names
+        run: |
+          mkdir -p out
+          cp artifacts/android-apk-test/ARIBS-ERP.apk out/ARIBS-ERP-staging-test.apk
+          cp artifacts/windows-installer-test/*.exe out/ARIBS-ERP-Setup-staging-test.exe
+          ls -la out
+
+      - name: Replace the old test build files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete staging-test --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
+
+      - name: Publish as pre-release "staging-test"
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: staging-test
+          target_commitish: ${{ github.sha }}
+          name: Staging test build (NOT for normal use)
+          prerelease: true
+          make_latest: false
+          body: |
+            Test build that opens **${{ env.ERP_SERVER_URL }}**.
+            Built from commit ${{ github.sha }} on ${{ github.event.repository.updated_at }}.
+            Not a real release - the apps' update checkers ignore it.
+          files: out/*
