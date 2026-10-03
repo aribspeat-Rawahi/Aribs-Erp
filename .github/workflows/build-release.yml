@@ -69,6 +69,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Remove an incomplete release of this version (release only)
+        if: env.IS_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            ASSETS=$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | join(" ")')
+            DRAFT=$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')
+            if [ "$DRAFT" = "false" ] && echo "$ASSETS" | grep -q '\.exe' && echo "$ASSETS" | grep -q '\.apk'; then
+              echo "::error::Release $TAG is already complete. Bump the version (desktop/package.json + mobile build.gradle) for a new release."
+              exit 1
+            fi
+            echo "Deleting incomplete release $TAG (assets: $ASSETS)"
+            gh release delete "$TAG" --yes --cleanup-tag -R "$GITHUB_REPOSITORY"
+          fi
+
       - name: Point the app at the ERP site
         run: |
           npm pkg set erpServerUrl="$ERP_SERVER_URL"
@@ -160,12 +178,23 @@ jobs:
         id: ver
         run: echo "version=$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
 
-      - name: Publish APK to the GitHub Release
+      # The Windows job left a DRAFT release v<version> with the installer.
+      # Add the APK to that same draft, then publish it - only now do the
+      # apps' update checkers see the new version, with both files present.
+      - name: Add APK to the draft release and publish it
         if: env.IS_RELEASE == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.ver.outputs.version }}
-          files: ARIBS-ERP.apk
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.ver.outputs.version }}"
+          gh release upload "$TAG" ARIBS-ERP.apk --clobber -R "$GITHUB_REPOSITORY"
+          ASSETS=$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | join(" ")')
+          echo "Assets: $ASSETS"
+          echo "$ASSETS" | grep -q '\.exe' || { echo "::error::Windows installer missing from $TAG"; exit 1; }
+          echo "$ASSETS" | grep -q 'latest.yml' || { echo "::error::latest.yml (Windows auto-update feed) missing from $TAG"; exit 1; }
+          gh release edit "$TAG" --draft=false --latest --target "$GITHUB_SHA" -R "$GITHUB_REPOSITORY"
+          echo "Published $TAG"
+
 
       - name: Upload test APK
         if: env.IS_RELEASE != 'true'
