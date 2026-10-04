@@ -1,6 +1,6 @@
 {
   "name": "aribs-erp-android",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "ARIBS ERP Android app - loads the live ERP site (live URL mode).",
   "scripts": {
     "sync": "cap sync android",

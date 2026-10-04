@@ -1,6 +1,6 @@
 {
   "name": "aribs-erp-desktop",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "ARIBS ERP - Windows desktop app. Loads the live ERP website (live URL mode), so every server update appears here immediately without reinstalling.",
   "main": "electron/main.js",
   "author": "ARIBS",
