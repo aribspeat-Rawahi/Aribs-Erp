@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerates the Android app icons / splash from branding/aribs-logo.svg.
-(The Windows app keeps its own icon in desktop/build-resources.)
+"""Regenerates every app icon / splash from branding/aribs-logo.svg.
 
 Run from the repo root after changing the logo:
     python3 branding/generate-icons.py
@@ -15,6 +14,7 @@ from PIL import Image
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SVG = os.path.join(ROOT, 'branding', 'aribs-logo.svg')
 RES = os.path.join(ROOT, 'mobile', 'android', 'app', 'src', 'main', 'res')
+DESKTOP = os.path.join(ROOT, 'desktop', 'build-resources')
 ICON_BACKGROUND = '#FFFFFF'  # also set in res/values/ic_launcher_background.xml
 LOGO_DP = 64  # logo width inside the 108dp adaptive-icon canvas (visible area ~72dp)
 LEGACY_FILL = 0.86  # logo size inside old-style (pre-Android 8) square icons
@@ -34,14 +34,23 @@ def logo(size: int) -> Image.Image:
     return master.resize((size, size), Image.LANCZOS)
 
 
+def badge(size: int) -> Image.Image:
+    # The round logo on a transparent square, with a little margin.
+    out = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    mark = logo(round(size * LEGACY_FILL))
+    out.paste(mark, ((size - mark.width) // 2, (size - mark.height) // 2), mark)
+    return out
+
+
+# Desktop (Windows exe + window icon): round logo, transparent background
+badge(512).save(os.path.join(DESKTOP, 'icon.png'))
+badge(256).save(os.path.join(DESKTOP, 'icon.ico'), sizes=[(s, s) for s in (16, 24, 32, 48, 64, 128, 256)])
+
 # Android launcher icons (legacy square/round = the round logo itself)
 densities = {'mdpi': 1, 'hdpi': 1.5, 'xhdpi': 2, 'xxhdpi': 3, 'xxxhdpi': 4}
 for name, scale in densities.items():
     folder = os.path.join(RES, f'mipmap-{name}')
-    size = round(48 * scale)
-    icon = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    mark = logo(round(size * LEGACY_FILL))
-    icon.paste(mark, ((size - mark.width) // 2, (size - mark.height) // 2), mark)
+    icon = badge(round(48 * scale))
     icon.save(os.path.join(folder, 'ic_launcher.png'))
     icon.save(os.path.join(folder, 'ic_launcher_round.png'))
     # Adaptive icon foreground: 108dp canvas with the logo centred and some
