@@ -38,6 +38,8 @@ function createWindow() {
     minHeight: 640,
     icon: path.join(__dirname, '..', 'build-resources', 'icon.png'),
     title: 'ARIBS ERP',
+    // cream page colour of the ERP, so there is no white flash while it loads
+    backgroundColor: '#F5F4EE',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
