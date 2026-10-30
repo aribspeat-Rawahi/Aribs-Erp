@@ -103,9 +103,14 @@ if (!app.requestSingleInstanceLock()) {
 
     // Look for a newer version of THIS app's installer on GitHub Releases.
     // Never touches the ERP server or its data. Safe to run every launch.
-    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-      console.error('[AutoUpdater] Could not check for updates:', err?.message || err);
-    });
+    // Checked at start and again every 4 hours, so a PC that stays open all
+    // day still gets the update alert.
+    const checkForAppUpdate = () =>
+      autoUpdater.checkForUpdates().catch((err) => {
+        console.error('[AutoUpdater] Could not check for updates:', err?.message || err);
+      });
+    checkForAppUpdate();
+    setInterval(checkForAppUpdate, 4 * 60 * 60 * 1000);
   });
 }
 
@@ -115,7 +120,13 @@ app.on('window-all-closed', () => {
 
 // ---- Update popups (electron-updater + GitHub Releases) ----
 
+// one popup per version (the 4-hourly checks must not repeat it)
+let announcedVersion = null;
+let readyVersion = null;
+
 autoUpdater.on('update-available', (info) => {
+  if (announcedVersion === info.version) return;
+  announcedVersion = info.version;
   dialog.showMessageBox(mainWindow, {
     type: 'info',
     title: 'Update available',
@@ -125,6 +136,8 @@ autoUpdater.on('update-available', (info) => {
 });
 
 autoUpdater.on('update-downloaded', (info) => {
+  if (readyVersion === info.version) return;
+  readyVersion = info.version;
   dialog
     .showMessageBox(mainWindow, {
       type: 'question',
